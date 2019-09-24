@@ -7,20 +7,21 @@ from numpy import linalg as LA
 import matplotlib.pyplot as plt
 import os
 from os.path import join, getsize
-from sklearn.metrics import precision_score, recall_score, f1_score, roc_curve, auc, roc_auc_score, precision_recall_curve, average_precision_score, cohen_kappa_score
+from sklearn.metrics import precision_score, recall_score, f1_score, roc_curve, auc, roc_auc_score, \
+    precision_recall_curve, average_precision_score, cohen_kappa_score
 from sklearn.preprocessing import MinMaxScaler
 
 
 def ReadS5Dataset(_file_name, _normalize=True):
     abnormal = pd.read_csv(_file_name, header=0, index_col=None)
-    abnormal_data = abnormal['value'].as_matrix()
-    abnormal_label = abnormal['is_anomaly'].as_matrix()
+    abnormal_data = abnormal['value'].values
+    abnormal_label = abnormal['is_anomaly'].values
     # Normal = 0, Abnormal = 1 => # Normal = 1, Abnormal = -1
 
     abnormal_data = np.expand_dims(abnormal_data, axis=1)
     abnormal_label = np.expand_dims(abnormal_label, axis=1)
 
-    if _normalize==True:
+    if _normalize == True:
         scaler = MinMaxScaler(feature_range=(0, 1))
         abnormal_data = scaler.fit_transform(abnormal_data)
 
@@ -29,25 +30,51 @@ def ReadS5Dataset(_file_name, _normalize=True):
     return abnormal_data, abnormal_label
 
 
-def ReadNABDataset(_file_name, _normalize=True):
+def ReadNABDataset_point(_file_name, _normalize=True):
+    with open('./NAB/labels/combined_labels.json') as data_file:
+        json_label = json.load(data_file)
+        keys = list(json_label.keys())
+        for key in keys:
+            json_label[os.path.basename(key)] = json_label[key]
+            json_label.pop(key, None)
+    abnormal = pd.read_csv(_file_name, header=0, index_col=0)
+    abnormal['label'] = 1
+    list_points = json_label.get(os.path.basename(_file_name))
+    for point in list_points:
+        abnormal.loc[point, 'label'] = -1
+    abnormal_data = abnormal['value'].values
+    abnormal_label = abnormal['label'].values
+    abnormal_data = np.expand_dims(abnormal_data, axis=1)
+    abnormal_label = np.expand_dims(abnormal_label, axis=1)
+    if _normalize:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        abnormal_data = scaler.fit_transform(abnormal_data)
+    return abnormal_data, abnormal_label
+
+
+def ReadNABDataset_window(_file_name, _normalize=True):
     with open('./NAB/labels/combined_windows.json') as data_file:
         json_label = json.load(data_file)
+        keys = list(json_label.keys())
+        for key in keys:
+            json_label[os.path.basename(key)] = json_label[key]
+            json_label.pop(key, None)
     abnormal = pd.read_csv(_file_name, header=0, index_col=0)
     abnormal['label'] = 1
     list_windows = json_label.get(os.path.basename(_file_name))
     for window in list_windows:
-        start = window[0]
-        end = window[1]
+        start = window[0][:window[0].index('.')]
+        end = window[1][:window[1].index('.')]
         abnormal.loc[start:end, 'label'] = -1
 
-    abnormal_data = abnormal['value'].as_matrix()
+    abnormal_data = abnormal['value'].values
     # abnormal_preprocessing_data = np.reshape(abnormal_preprocessing_data, (abnormal_preprocessing_data.shape[0], 1))
-    abnormal_label = abnormal['label'].as_matrix()
+    abnormal_label = abnormal['label'].values
 
     abnormal_data = np.expand_dims(abnormal_data, axis=1)
     abnormal_label = np.expand_dims(abnormal_label, axis=1)
 
-    if _normalize==True:
+    if _normalize:
         scaler = MinMaxScaler(feature_range=(0, 1))
         abnormal_data = scaler.fit_transform(abnormal_data)
 
@@ -81,11 +108,13 @@ def ReadUAHDataset(_file_folder, _normalize=True):
         return b
 
     def ReadRawGPSDataset(_folder_name):
-        dataset = np.loadtxt(fname=_folder_name + '/' + os.path.basename(_folder_name) + '_RAW_GPS.txt', delimiter=' ', usecols=(1, 7))
+        dataset = np.loadtxt(fname=_folder_name + '/' + os.path.basename(_folder_name) + '_RAW_GPS.txt', delimiter=' ',
+                             usecols=(1, 7))
         return dataset
 
     def ReadTimestampAndLabelOfSemanticDataset(_folder_name):
-        dataset = np.loadtxt(fname=_folder_name + '/' + os.path.basename(_folder_name) + '_SEMANTIC_ONLINE.txt', delimiter=' ', usecols=(0, 23, 24, 25))
+        dataset = np.loadtxt(fname=_folder_name + '/' + os.path.basename(_folder_name) + '_SEMANTIC_ONLINE.txt',
+                             delimiter=' ', usecols=(0, 23, 24, 25))
         return dataset
 
     def PreprocessRawData(_raw_data):
@@ -151,14 +180,14 @@ def Read2DDataset(_file_name, _normalize=True):
 
 def ReadECGDataset(_file_name, _normalize=True):
     abnormal = pd.read_csv(_file_name, header=None, index_col=None, skiprows=0, sep=',')
-    abnormal_data = abnormal.iloc[:, [0, 1, 2]].as_matrix()
-    abnormal_label = abnormal.iloc[:, 3].as_matrix()
+    abnormal_data = abnormal.iloc[:, [0, 1, 2]].values
+    abnormal_label = abnormal.iloc[:, 3].values
     # Normal = 0, Abnormal = 1 => # Normal = 1, Abnormal = -1
 
     # abnormal_data = np.expand_dims(abnormal_data, axis=1)
     abnormal_label = np.expand_dims(abnormal_label, axis=1)
 
-    if _normalize == True:
+    if _normalize:
         scaler = MinMaxScaler(feature_range=(0, 1))
         abnormal_data = scaler.fit_transform(abnormal_data)
 
@@ -167,15 +196,17 @@ def ReadECGDataset(_file_name, _normalize=True):
     return abnormal_data, abnormal_label
 
 
-
 def ReadGDDataset(_file_name, _normalize=True):
     abnormal = pd.read_csv(_file_name, header=0, index_col=0)
-    abnormal_data = abnormal[['MotorData.ActCurrent', 'MotorData.ActPosition', 'MotorData.ActSpeed', 'MotorData.IsAcceleration',
-                             'MotorData.IsForce', 'MotorData.Motor_Pos1reached', 'MotorData.Motor_Pos2reached', 'MotorData.Motor_Pos3reached',
-                             'MotorData.Motor_Pos4reached', 'NVL_Recv_Ind.GL_Metall', 'NVL_Recv_Ind.GL_NonMetall',
-                             'NVL_Recv_Storage.GL_I_ProcessStarted', 'NVL_Recv_Storage.GL_I_Slider_IN', 'NVL_Recv_Storage.GL_I_Slider_OUT',
-                             'NVL_Recv_Storage.GL_LightBarrier', 'NVL_Send_Storage.ActivateStorage', 'PLC_PRG.Gripper', 'PLC_PRG.MaterialIsMetal']].as_matrix()
-    if _normalize==True:
+    abnormal_data = abnormal[
+        ['MotorData.ActCurrent', 'MotorData.ActPosition', 'MotorData.ActSpeed', 'MotorData.IsAcceleration',
+         'MotorData.IsForce', 'MotorData.Motor_Pos1reached', 'MotorData.Motor_Pos2reached',
+         'MotorData.Motor_Pos3reached',
+         'MotorData.Motor_Pos4reached', 'NVL_Recv_Ind.GL_Metall', 'NVL_Recv_Ind.GL_NonMetall',
+         'NVL_Recv_Storage.GL_I_ProcessStarted', 'NVL_Recv_Storage.GL_I_Slider_IN', 'NVL_Recv_Storage.GL_I_Slider_OUT',
+         'NVL_Recv_Storage.GL_LightBarrier', 'NVL_Send_Storage.ActivateStorage', 'PLC_PRG.Gripper',
+         'PLC_PRG.MaterialIsMetal']].as_matrix()
+    if _normalize == True:
         scaler = MinMaxScaler(feature_range=(0, 1))
         abnormal_data = scaler.fit_transform(abnormal_data)
 
@@ -188,10 +219,11 @@ def ReadGDDataset(_file_name, _normalize=True):
 
 def ReadHSSDataset(_file_name, _normalize=True):
     abnormal = pd.read_csv(_file_name, header=0, index_col=0)
-    abnormal_data = abnormal[['I_w_BLO_Weg', 'O_w_BLO_power', 'O_w_BLO_voltage', 'I_w_BHL_Weg', 'O_w_BHL_power', 'O_w_BHL_voltage',
-                              'I_w_BHR_Weg', 'O_w_BHR_power', 'O_w_BHR_voltage', 'I_w_BRU_Weg', 'O_w_BRU_power', 'O_w_BRU_voltage',
-                              'I_w_HR_Weg', 'O_w_HR_power', 'O_w_HR_voltage', 'I_w_HL_Weg', 'O_w_HL_power', 'O_w_HL_voltage']].as_matrix()
-    if _normalize==True:
+    abnormal_data = abnormal[
+        ['I_w_BLO_Weg', 'O_w_BLO_power', 'O_w_BLO_voltage', 'I_w_BHL_Weg', 'O_w_BHL_power', 'O_w_BHL_voltage',
+         'I_w_BHR_Weg', 'O_w_BHR_power', 'O_w_BHR_voltage', 'I_w_BRU_Weg', 'O_w_BRU_power', 'O_w_BRU_voltage',
+         'I_w_HR_Weg', 'O_w_HR_power', 'O_w_HR_voltage', 'I_w_HL_Weg', 'O_w_HL_power', 'O_w_HL_voltage']].as_matrix()
+    if _normalize == True:
         scaler = MinMaxScaler(feature_range=(0, 1))
         abnormal_data = scaler.fit_transform(abnormal_data)
 
@@ -260,6 +292,11 @@ def CalculateFinalAnomalyScore(_ensemble_score):
     return final_score
 
 
+def calculate_nab_score(_abnormal_label, pred):
+
+    pass
+
+
 def PrintPrecisionRecallF1Metrics(_precision, _recall, _f1):
     print('precision=' + str(_precision))
     print('recall=' + str(_recall))
@@ -294,7 +331,7 @@ def SquareErrorDataPoints(_input, _output):
 def Z_Score(_error):
     mu = np.nanmean(_error)
     gamma = np.nanstd(_error)
-    zscore = (_error - mu)/gamma
+    zscore = (_error - mu) / gamma
     return zscore
 
 
@@ -346,7 +383,8 @@ def PlotROCAUC(_fpr, _tpr, _roc_auc):
 def PlotPrecisionRecallCurve(_precision, _recall, _average_precision):
     plt.figure(2)
     lw = 2
-    plt.step(_recall, _precision, color='darkorange', lw=lw, alpha=1, where='post', label='PR curve (area = %0.2f)' % _average_precision)
+    plt.step(_recall, _precision, color='darkorange', lw=lw, alpha=1, where='post',
+             label='PR curve (area = %0.2f)' % _average_precision)
     # plt.fill_between(_recall, _precision, step='post', alpha=0.2, color='b')
     plt.plot([0, 1], [1, 0], color='navy', lw=lw, linestyle='--')
     plt.xlabel('Recall')
@@ -357,8 +395,6 @@ def PlotPrecisionRecallCurve(_precision, _recall, _average_precision):
     # plt.legend('AP={0:0.2f}'.format(_average_precision))
     plt.legend(loc="lower right")
     plt.show()
-
-
 
 # ReadS5Dataset('./YAHOO/data/A1Benchmark/real_1.csv')
 # ReadGDDataset('./GD/data/Genesis_AnomalyLabels.csv')
